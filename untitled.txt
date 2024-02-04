@@ -1,0 +1,145 @@
+#Source Subtraction Plot
+import matplotlib.pyplot as plt
+from matplotlib.font_manager import FontProperties
+
+font = FontProperties(fname=r'times.ttf')
+
+plt.rcParams['text.usetex'] = True
+
+map_obj = maps.FlatSkyMap(cf.snmap,
+                              res=0.25*core.G3Units.arcmin,
+                              weighted=False,
+                              alpha_center=(352.5)*core.G3Units.deg,
+                              delta_center=(-55)*core.G3Units.deg,
+                              proj=maps.MapProjection.Proj0)
+
+spt3g.maps.fitsio.save_skymap_fits('results/paper_image_files/new_90_SPT3G_full_snmap.fits',map_obj,overwrite=True)
+
+import aplpy
+ra_center = 350
+dec_center = -56.5
+width = 3
+height = 3
+
+# Create a Matplotlib figure
+fig = plt.figure(figsize=(16, 12))  # Adjusted the figure size
+
+# Parameters for the small left subplots
+left_width = 0.3  # Width of each of the left subplots
+small_subplot_params = [
+    [0.1, 0.67, left_width, 0.067],
+    [0.1, 0.34, left_width, 0.3],
+    [0.1, 0.01, left_width, 0.3],
+]
+files = ['results/paper_image_files/new_90_SPT3G_full_ss_template.fits',
+         'results/paper_image_files/new_90_SPT3G_full_ss_map.fits',
+         'results/paper_image_files/new_90_SPT3G_full_map_obj.fits']
+
+for i,params in enumerate(small_subplot_params):
+    gc = aplpy.FITSFigure(files[i], figure=fig, subplot=params)
+    gc.show_colorscale(cmap='bone')
+    if i != 0:
+        gc.recenter(ra_center, dec_center, width=width, height=height)
+    if i == 1:
+        gc.show_colorscale(cmap='bone',vmin=-5e1, vmax=5e1)
+    gc.axis_labels.hide()
+    gc.tick_labels.hide()
+    gc.ticks.hide()
+
+# Parameters for the large right subplot
+right_width = 2 * left_width  # Double the width of the left plots
+large_subplot_params = [0.49, 0.01, right_width, 0.72]  # Adjusted 'left' and 'width'
+
+gc_large = aplpy.FITSFigure('results/paper_image_files/new_90_SPT3G_full_skymap.fits', figure=fig, subplot=large_subplot_params)
+gc_large.show_colorscale(cmap='bone')
+gc_large.recenter(ra_center, dec_center, width=width, height=height)
+gc_large.axis_labels.set_font(family='Times New Roman',size=15)
+plt.show()
+
+
+#Psi Plot
+ell_min = 0
+ell_max = np.pi / (cf.resrad)
+delta_ell = 2 * np.pi / (np.max([cf.nx,cf.ny]) * cf.resrad)
+ell_bins = np.arange(ell_min, ell_max + delta_ell, delta_ell)
+ell_plot=(np.array(ell_bins[1:]) + np.array(ell_bins[:-1]))/2
+
+pypsi=np.reshape(np.split(cf.psi,cf.psi.shape[-1],axis=2),(cf.psi.shape[-1], 3360, 3360)) 
+py = []
+for i in range(len(pypsi)):
+    py.append(basicmaputils.av_ps(-1*pypsi[i],
+                             .25*core.G3Units.arcmin,
+                             ell_bins,s=(cf.ny,cf.nx),real=False))
+def ell_to_theta_arcmin(ell):
+    theta_rad = 2 * np.pi / ell
+    theta_arcmin = theta_rad * 180 * 60 / np.pi
+    return theta_arcmin
+
+from matplotlib.ticker import ScalarFormatter
+def plot_psi():
+    colors = [aiiro, '#EA8B4E', '#C67FAB','#5A7B70', shion,
+              azuki,'#7FC69D', kitsune, kakitsubata, tonocha]
+    names = ['90GHz','150GHz','220GHz','90GHz','150GHz','90GHz','150GHz','PLW','PMW','PSW']
+    plt.rcParams['figure.figsize'] = (7,10)
+    fig, (ax1,ax2) = plt.subplots(2,1,gridspec_kw={'height_ratios': [2, 1],
+                                                  'hspace':0.1},sharex=True)
+    x = ell_plot
+    line1, = ax1.semilogx(x, py[0]/np.max(py[0]), label='90 GHz', color=colors[0],linewidth=2.1)
+    line2, = ax1.semilogx(x, py[1]/np.max(py[0]), label='150 GHz', color=colors[1],linewidth=2.1)
+    line3, = ax1.semilogx(x, py[2]/np.max(py[0]), label='220 GHz', color=colors[2],linewidth=2.1)
+    
+    line4, = ax1.semilogx(x, py[3]/np.max(py[0]), label='90 GHz', color=colors[3],linewidth=2.1,linestyle='--')
+    line5, = ax1.semilogx(x, py[4]/np.max(py[0]), label='150 GHz', color=colors[4],linewidth=2.1,linestyle='--')
+    
+    line6, = ax1.semilogx(x, py[5]/np.max(py[0]), label='90 GHz', color=colors[5],linewidth=2.1,linestyle='dotted')
+    line7, = ax1.semilogx(x, py[6]/np.max(py[0]), label='150 GHz', color=colors[6],linewidth=2.1,linestyle='dotted')
+    
+    line8, = ax2.semilogx(x, py[7]/np.max(py[0]), label='PLW', color=colors[7],linewidth=2.1)
+    line9, = ax2.semilogx(x, py[8]/np.max(py[0]), label='PMW', color=colors[8],linewidth=2.1)
+    line10, = ax2.semilogx(x, py[9]/np.max(py[0]), label='PSW', color=colors[9],linewidth=2.1)
+
+    
+    
+
+    legend1 = ax1.legend(handles=[line1,line2,line3], bbox_to_anchor = [0.31-0.03, 1], title=r'\underline{SPT3G}',fontsize=12,title_fontsize=15)
+    legend2 = ax1.legend(handles=[line4,line5], bbox_to_anchor=[0.33-0.03, 0.8-0.05], title=r'\underline{SPTPol 500d}',fontsize=12,title_fontsize=15)
+    legend3 = ax1.legend(handles=[line6,line7], bbox_to_anchor=[0.33-0.03, 0.65-0.1], title=r'\underline{SPTPol 100d}',fontsize=12,title_fontsize=15)
+    
+    legend4 = ax2.legend(handles=[line8,line9,line10], bbox_to_anchor=[0.23, 1], title=r'\underline{Herschel}',fontsize=12,title_fontsize=15)
+
+    
+    ax1.add_artist(legend1)
+    ax1.add_artist(legend2)
+    ax1.add_artist(legend3)
+    
+    ax2.add_artist(legend4)
+
+    fig.tight_layout()
+    ax1.set_xlim(1e2,5e4)
+    ax2.set_xlim(1e2,5e4)
+    formatter = ScalarFormatter(useMathText=True)
+    formatter.set_scientific(True)
+    formatter.set_powerlimits((-1,1))
+    ax2.yaxis.set_major_formatter(formatter)
+    ax2.legend()
+    
+    new_axis = ax1.twiny()
+    new_axis.set_xscale('log')
+    original_ticks = [1e2,1e3,1e4]
+
+    new_axis.set_xlim(ax1.get_xlim())
+    new_axis.set_xticks(original_ticks)
+    new_labels = [r'$10^2$', r'$10^1$',r'$10^0$']
+    new_axis.set_xticklabels(new_labels)
+    new_axis.set_xlabel('Angular Scale ' +r'$(\theta)$'+' [arcmin]' ,fontsize=17,y=1.2)
+    ax2.set_xlabel('Angular Multipole ' + r'$(\ell)$',fontsize=17,fontweight='bold')
+    ax1.set_ylabel(r'$\Psi(\ell)$'+' [arb]',fontsize=20)
+    ax1.grid(alpha=0.1)
+    ax2.grid(alpha=0.1)
+    fig.savefig('results/paper_image_files/finals/matched_filter.png')
+
+
+    return
+
+                             
+                             
