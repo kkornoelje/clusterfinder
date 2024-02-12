@@ -7,7 +7,7 @@ import cilc
 
 
 class cluster_finder():
-    def __init__(self,fields,dic,units='uk',verbose=True,psize=0.25):  
+    def __init__(self,fields,dic,units='uk',verbose=True):  
         self.beta_profile_file = '/big_scratch/mck74/polmaps/sptpol_100d/'+'profiles_12_beta1_rc025_rc300.sav' #This is where the beta profiles live.
         self.pol_directory='/big_scratch/mck74/polmaps/sptpol_100d/' 
         
@@ -17,7 +17,6 @@ class cluster_finder():
         self.ell = np.arange(43_200)
         self.idl_ls = np.arange(80001)
         self.ell_max = 43_200
-        self.psize = psize
         
         self.units = units
         self.fields = fields
@@ -27,13 +26,13 @@ class cluster_finder():
         self.fields = fields
 
         self.map_setting_dic = dic['map_inputs_dic']
-        self.tcs=np.array([tci/self.psize for tci in self.tc_arcmin])
+        
         
         
         #Grab all the values from the google doc and throw them into a dictionary
         for key, value in self.map_setting_dic.items():
             setattr(self, key, value)
-            
+        self.tcs=np.array([tci/self.psize for tci in self.tc_arcmin])
             
         self.setting_dic = {}
         for key in dic['inputs_dic']:
@@ -80,7 +79,6 @@ class cluster_finder():
         
     def make_maps(self,what_mask):
         for i,key in enumerate(self.setting_dic):
-            print(' d')
             self.ss_map, self.mask, self.mask2 = load_mask(self.setting_dic, key,what_mask,self.ny,self.nx) 
             self.setting_dic[key]['ss_maps'] = self.ss_map
             self.setting_dic[key]['skymaps']+=self.ss_map
@@ -117,7 +115,7 @@ class cluster_finder():
                     self.astro_cl_dict[field][comp] = curr_fg
         return
 
-    def make_instr_noise(self,scale=1):
+    def make_instr_noise(self):
         for i,key in enumerate(self.setting_dic):
             curr_noise_instrument = self.setting_dic[key]['NoiseInstrument'][0]
             if self.units == 'mJy':
@@ -126,11 +124,10 @@ class cluster_finder():
             if 'W' in key:
                 curr_noise_instrument = np.fft.fft2(np.fft.fftshift(self.setting_dic[key]['skymaps'][0])*self.resrad,norm='ortho')
                 
-
             self.setting_dic[key]['NoiseInstrument'][0] = (curr_noise_instrument)
         return
        
-    def make_covar(self,my_inver='None',my_ncov1d='None',nmatastro='None',nmatinst='None'):
+    def make_covar(self):
         self.ncov1d = clu.make_astro_covar_matrix(self.astro_cl_dict)
         self.nmatastro=create_ncovbd(self.ncov1d, [self.setting_dic[f]['beams'][0] for f in self.fields],
                                         self.psize,self.nbands,self.ny,self.nx,self.ell_max)
@@ -143,34 +140,28 @@ class cluster_finder():
             
         return
 
-    def find_clusters(self,sn_cutoff,tcs=(0,1),bvec='None',point_source_finder=False,add_false_detections=False):
+    def find_clusters(self,sn_cutoff,tcs=(0,1),bvec='None',point_source_finder=False,add_false_detections=False, save_only_cat=True):
         self.bvec = bvec
         self.skymaps = [self.setting_dic[f]['skymaps'][0] for f in self.fields]
         
         self.psis={};self.fmaps={};self.snmaps={};self.predicteds=np.array([]);self.measureds=np.array([])
         self.maxes=np.array([]);self.xes=np.array([]);self.yes=np.array([]);self.tlocs=np.array([])
-        self.results = {}
         
-        
-        for ti in range(tcs[0],tcs[1]):
-            name = self.tc_arcmin[ti]
-            self.results[name] = {}
-            self.results[name]['psi'] = []
-            self.results[name]['predicted_sigma'] = []
-            self.results[name]['measured_sigma'] = []
-            self.results[name]['snmap'] = []
-            self.results[name]['cilc_psi'] = []
-            self.results[name]['cilc_fmaps'] = []
+        if save_only_cat == False:
+            self.results = {}
             
-        print('norm')
-        norm_factors =[ 7.66780e-08,  3.06715e-07,  6.90103e-07,  1.22692e-06,  1.91692e-06,  2.76045e-06,  3.75714e-06,  4.90727e-06,  6.21089e-06,
-  7.66767e-06,  9.27791e-06,  1.10415e-05]
+            for ti in range(tcs[0], tcs[1]):
+                name = self.tc_arcmin[ti]
+                self.results[name] = {key: [] for key in ['psi', 'predicted_sigma', 'measured_sigma', 'snmap', 'cilc_psi', 'cilc_fmaps']}
+            
+
+#         norm_factors =[ 7.66780e-08,  3.06715e-07,  6.90103e-07,  1.22692e-06,  1.91692e-06,  2.76045e-06,  3.75714e-06,  4.90727e-06,  6.21089e-06,
+#   7.66767e-06,  9.27791e-06,  1.10415e-05]
+        
         for ti in range(tcs[0],tcs[1]):
             name = self.tc_arcmin[ti]
-            print(name)
             profile_ft=clu.gridtomap(clu.ell_grid(self.psize,self.ny,self.nx),self.idl_profiles['profs'][ti],self.idl_ls)
-            self.profile_ft = profile_ft#*norm_factors[ti]
-                    
+
             if point_source_finder:
                 print('Finding Point Sources')
                 self.fsz = [1]*self.nbands
@@ -178,14 +169,16 @@ class cluster_finder():
                 
             else:     
                 print('Finding Clusters')
-                ft_signal= clu.create_multi_band_s([profile_ft * self.setting_dic[f]['beams'][0] for f in self.fields])
-                self.ft_signal = ft_signal
+                self.ft_signal= clu.create_multi_band_s([profile_ft * self.setting_dic[f]['beams'][0] for f in self.fields])
                 
             if type(bvec) is str:
-                print('Running Minimum Variance')
                 self.psi, self.sigma = clu.psi_faster(self.fsz, self.ft_signal, self.nmatfull, self.ny, self.nx, self.nbands)
                 self.fmap = clu.multi_band_filter(self.skymaps, self.psi,self.psize,self.nbands)
                 self.snmap = clu.make_snmap([self.fmap],self.apod2,self.mask2,self.psize)[0]
+                if save_only_cat == False:
+                    self.results[name]['snmap'] = self.snmap
+                    self.results[name]['psi'] = self.psi
+                
                 
             else:
                 print('Running cILC')
@@ -401,6 +394,7 @@ def plot_inputs(cf,keys):
         axs[i].set_xlabel(r'$\ell$',fontsize=15)
         axs[0].set_ylabel(r'$C\ell (\mu K^2 -rad)$',fontsize=16)
     return
+
 def plot_psi(plot=True):
     ell_min = 0
     ell_max = np.pi / (self.resrad)
